@@ -1,0 +1,38 @@
+# This file describes the Large Language Model (LLM) usage, integration, or related metadata for this repository.
+# If your project uses LLMs (e.g., OpenAI GPT, Claude, Llama, etc.), document the relevant details below.
+
+## LLM Usage Overview
+
+# Does this project use LLMs? (Yes/No)
+No (update to 'Yes' if you begin LLM integration)
+
+# LLM Providers (if applicable)
+# e.g., OpenAI, Anthropic, Meta, Google
+# Provider: <provider_name>
+# Model: <model_name>
+# API Version: <api_version>
+# Endpoint: <api_endpoint>
+
+# LLM Integration Purpose
+# e.g., Generating natural language responses, code completion, data extraction, semantic analysis, etc.
+
+# LLM Configuration Details
+# API keys/secrets management approach:
+# Rate limits, batching, streaming, etc:
+
+# Data Privacy/Retention Policy
+# How is data sent to the LLM handled? Are user prompts, code, or sensitive data transmitted?
+# Retention, deletion, and compliance details:
+
+# Additional Notes
+# - Update this file as your LLM usage evolves.
+# - Reference any related documentation, design docs, or compliance statements.
+
+# Example (for reference, delete if not applicable):
+# Provider: OpenAI
+# Model: GPT-4
+# API Version: v1
+# Endpoint: https://api.openai.com/v1/chat/completions
+# Purpose: Semantic code search and automated code review
+# API Keys: Managed via environment variables
+# Data Privacy: No user PII sent to the API, prompts anonymized
