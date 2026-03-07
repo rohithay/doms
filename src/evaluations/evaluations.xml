@@ -1,0 +1,149 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<evaluations>
+  <description>
+    Critical path evaluations for AnalyzeQueryCostTool — covers cost estimation accuracy,
+    optimization detection, risk gating, and input safety. These represent the highest-impact
+    failure modes in production.
+  </description>
+
+  <evaluation id="eval_001">
+    <name>Cost Estimation and Tier Classification</name>
+    <description>
+      Verify that the tool correctly estimates cost from dry-run bytes and assigns
+      the right cost tier. This is the core contract of the tool — if this is wrong,
+      nothing downstream can be trusted.
+    </description>
+    <scenario>
+      A data analyst submits a straightforward SELECT query against a large table:
+
+        SELECT user_id, event_type, created_at
+        FROM `project.dataset.events`
+        WHERE created_at >= '2024-01-01'
+
+      The BigQuery dry-run returns 15GB bytes_processed (16106127360 bytes).
+    </scenario>
+    <expected_steps>
+      1. Call execute() with the SQL above
+      2. Tool performs dry-run via _perform_dry_run_analysis()
+      3. Tool calls _calculate_cost_estimates() with bytes_processed = 16106127360
+      4. Cost is calculated as: (15 / 1024) TB * $6.25 = ~$0.0916
+      5. Cost tier is classified as LOW (between $0 and $1)
+      6. Result is returned with success: true
+    </expected_steps>
+    <success_criteria>
+      - estimated_cost_usd is within 1% of $0.0916
+      - cost_tier is "LOW"
+      - bytes_to_process equals 16106127360
+      - price_per_tb in cost_breakdown equals 6.25
+      - success is true
+    </success_criteria>
+  </evaluation>
+
+  <evaluation id="eval_002">
+    <name>Optimization Pattern Detection — Multiple Violations</name>
+    <description>
+      Verify the tool correctly identifies all optimization anti-patterns present
+      in a poorly written query. Missing even one pattern means real money is left
+      on the table in production.
+    </description>
+    <scenario>
+      A new engineer submits this query for cost review:
+
+        SELECT *
+        FROM `project.dataset.large_events`
+        ORDER BY created_at
+
+      This query has three distinct anti-patterns: SELECT *, no WHERE clause,
+      and ORDER BY without LIMIT.
+    </scenario>
+    <expected_steps>
+      1. Call execute() with include_optimization=true and the SQL above
+      2. Tool calls _generate_optimization_suggestions() with pattern-based model
+      3. Pattern matcher checks for: select_star, no_where_clause, no_limit_with_order
+      4. All three patterns are matched against the SQL
+      5. Three distinct suggestions are returned
+    </expected_steps>
+    <success_criteria>
+      - optimization_suggestions contains exactly 3 items (no duplicates)
+      - One suggestion references replacing SELECT * with specific columns
+      - One suggestion references adding a WHERE clause
+      - One suggestion references adding a LIMIT clause
+      - include_optimization=false returns an empty optimization_suggestions list
+    </success_criteria>
+  </evaluation>
+
+  <evaluation id="eval_003">
+    <name>Critical Risk Gate — High Cost Query Should Block Execution</name>
+    <description>
+      Verify that a query processing over 1TB is correctly flagged as CRITICAL risk
+      and the execution_recommendation tells the caller not to run it. This is the
+      primary safety mechanism of the tool — a wrong risk level could cause a
+      five-figure BigQuery bill.
+    </description>
+    <scenario>
+      A pipeline engineer submits a full-scan query against a multi-TB table:
+
+        SELECT *
+        FROM `project.dataset.raw_clickstream`
+
+      The dry-run returns 2199023255552 bytes (2TB). There is no WHERE clause,
+      no partition filter, and it uses SELECT *.
+    </scenario>
+    <expected_steps>
+      1. Call execute() with the SQL above
+      2. _calculate_cost_estimates() produces ~$13.75 (2TB * $6.25 / 1024... 
+         wait — 2TB = 2 * $6.25 = $12.50), cost_tier = HIGH
+      3. _assess_execution_risk() accumulates risk_score from:
+         - High cost (>$5): +2
+         - Extremely large data volume (>1TB): +4
+         - SELECT * on large dataset (>1GB): +2
+         - Full table scan without WHERE: +3
+         Total risk_score >= 8 → risk_level = CRITICAL
+      4. execution_recommendation reflects CRITICAL level
+    </expected_steps>
+    <success_criteria>
+      - risk_assessment.risk_level is "CRITICAL"
+      - risk_assessment.risk_score is >= 8
+      - risk_assessment.execution_recommendation contains "DO NOT EXECUTE"
+      - risk_assessment.risk_factors includes entries for data volume and full table scan
+      - risk_assessment.mitigation_steps is non-empty
+      - cost_tier is "HIGH" or "CRITICAL"
+    </success_criteria>
+  </evaluation>
+
+  <evaluation id="eval_004">
+    <name>Input Validation — Malformed and Dangerous SQL</name>
+    <description>
+      Verify the tool rejects invalid inputs before making any network calls.
+      Failing to validate early means wasting dry-run quota, risking BQ errors
+      surfacing as unhandled exceptions, and exposing potential injection surfaces.
+    </description>
+    <scenario>
+      Three separate calls are made to execute():
+        Case A — empty string: sql=""
+        Case B — whitespace only: sql="   "
+        Case C — DML statement: sql="DROP TABLE `project.dataset.events`"
+    </scenario>
+    <expected_steps>
+      1. Case A: execute() called with empty string
+         - Tool detects empty SQL before any I/O
+         - Returns success: false with a validation error message
+         - No BigQuery API call is made
+      2. Case B: execute() called with whitespace-only string
+         - Same early rejection path as Case A
+         - No BigQuery API call is made
+      3. Case C: execute() called with DROP TABLE statement
+         - _is_dml_query() (or equivalent validation) detects DML
+         - Returns success: false with a clear rejection reason
+         - No BigQuery API call is made
+    </expected_steps>
+    <success_criteria>
+      - All three cases return success: false
+      - No cases trigger a BigQuery dry-run API call
+      - Error messages are human-readable and do not expose internal stack traces
+      - Case C error message distinguishes DML rejection from empty-input rejection
+      - Response time for all three is under 50ms (pure in-process validation)
+    </success_criteria>
+  </evaluation>
+
+</evaluations>
