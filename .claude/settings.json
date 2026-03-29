@@ -1,12 +1,15 @@
 {
-  "mcpServers": {
-    "dataops-cost-analyzer": {
-      "command": "uv",
-      "args": ["run", "python", "src/main.py"],
-      "cwd": "/Users/ryarlagadda/repos/dataops-mcp-server",
-      "env": {
-        "GCP_PROJECT_ID": "gcp-wow-wiq-tsr-dev"
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -r '.tool_input.command // \"\"' | grep -qE '^git commit' && cd \"$CLAUDE_PROJECT_DIR\" && echo '🔍 Running pre-commit before commit...' && pre-commit run || true"
+          }
+        ]
       }
-    }
+    ]
   }
 }
