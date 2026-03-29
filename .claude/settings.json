@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "dataops-cost-analyzer": {
+      "command": "uv",
+      "args": ["run", "python", "src/main.py"],
+      "cwd": "/Users/ryarlagadda/repos/dataops-mcp-server",
+      "env": {
+        "GCP_PROJECT_ID": "gcp-wow-wiq-tsr-dev"
+      }
+    }
+  }
+}
